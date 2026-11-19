@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bạn mạnh ở chỉ số nào?</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f4f6fb; }
+    .page { max-width: 760px; }
+    .answer-label { display: block; padding: .85rem 1rem; text-align: left; }
+    .answer-label:focus-within, .btn-check:focus-visible + .answer-label { outline: 3px solid #86b7fe; outline-offset: 2px; }
+    .question-card { min-height: 25rem; }
+    .progress { height: .75rem; }
+  </style>
+</head>
+<body>
+<main class="container page py-4 py-sm-5">
+  <!-- Màn hình giới thiệu -->
+  <section id="intro" class="text-center py-5">
+    <h1 class="display-5 fw-bold mb-3">Bạn mạnh ở chỉ số nào?</h1>
+    <p class="lead mb-4">Bài tự đánh giá gồm 100 tình huống, giúp bạn nhìn lại điểm mạnh và điều muốn phát triển. Kết quả chỉ mang tính tham khảo.</p>
+    <p class="text-muted">Chọn mức độ bạn thường hành động như mô tả. Bạn có thể quay lại để sửa câu trả lời.</p>
+    <button id="start" type="button" class="btn btn-primary btn-lg px-5">Bắt đầu làm bài</button>
+  </section>
+
+  <!-- Mỗi lần chỉ hiện một câu, không hiện tên nhóm -->
+  <section id="quiz" class="d-none" aria-label="Bài tự đánh giá">
+    <div class="d-flex justify-content-between mb-2"><span id="position"></span><span id="progress-text" aria-live="polite"></span></div>
+    <div id="progress" class="progress mb-4" role="progressbar" aria-label="Số câu đã trả lời" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progress-bar" class="progress-bar"></div></div>
+    <div class="card question-card shadow-sm border-0">
+      <div class="card-body p-4 p-sm-5">
+        <p class="text-muted small">Trong tình huống này, bạn thường làm như mô tả ở mức nào?</p>
+        <fieldset>
+          <legend id="question" class="fs-4 fw-semibold mb-4" tabindex="-1"></legend>
+          <div id="options" class="d-grid gap-2"></div>
+        </fieldset>
+      </div>
+    </div>
+    <p id="warning" class="text-danger mt-3" role="alert"></p>
+    <div class="d-flex gap-2 mt-3 mb-5">
+      <button id="previous" type="button" class="btn btn-outline-secondary">Câu trước</button>
+      <button id="next" type="button" class="btn btn-primary ms-auto">Câu tiếp</button>
+    </div>
+  </section>
+
+  <!-- Kết quả theo bốn nhóm, mỗi nhóm có 25 câu -->
+  <section id="result" class="d-none" aria-labelledby="result-heading">
+    <h2 id="result-heading" class="text-center fw-bold mb-2" tabindex="-1">Kết quả của bạn</h2>
+    <p class="text-muted text-center mb-4">Mỗi phần gồm 25 câu, tối đa 125 điểm. Điểm phản ánh câu trả lời tự đánh giá của bạn.</p>
+    <div id="score-cards" class="row g-3 mb-4"></div>
+    <div id="highlights"></div>
+    <div class="d-grid mt-4 mb-5"><button id="reset" type="button" class="btn btn-outline-primary btn-lg">Làm lại</button></div>
+  </section>
+  <p class="text-center text-muted small">Bài test tự đánh giá, không phải công cụ đo lường tâm lý học chuẩn hóa. Kết quả chỉ mang tính tham khảo.</p>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  // Dữ liệu nhóm chỉ dùng để tính và trình bày kết quả, không hiện khi làm bài.
+  const groups = {
+    A: { title: 'Tư duy và học hỏi (IQ / CQ)', color: 'primary', strong: 'Câu trả lời cho thấy bạn thường chủ động phân tích, học hỏi hoặc thử cách làm mới.', tip: 'Thử chia nhỏ vấn đề, kiểm tra các giả định và dành thời gian học một kỹ năng mới.' },
+    B: { title: 'Cảm xúc và quan hệ (EQ / SQ)', color: 'danger', strong: 'Câu trả lời cho thấy bạn thường chú ý đến cảm xúc và cách kết nối với người khác.', tip: 'Luyện lắng nghe, hỏi lại điều chưa rõ và dành thời gian nhận diện cảm xúc của mình.' },
+    C: { title: 'Vượt khó và thích ứng (AQ / RQ)', color: 'warning', strong: 'Câu trả lời cho thấy bạn thường tìm cách điều chỉnh và tiếp tục khi gặp khó khăn.', tip: 'Chia thử thách thành bước nhỏ, tìm sự hỗ trợ khi cần và ghi lại điều học được sau mỗi lần thử.' },
+    D: { title: 'Giá trị và kỹ năng thực tế (MQ / TQ / FQ / LQ)', color: 'success', strong: 'Câu trả lời cho thấy bạn thường chú ý đến trách nhiệm và những kỹ năng thực tế.', tip: 'Thử lập kế hoạch chi tiêu, tìm hiểu công cụ mới và nhận một trách nhiệm phù hợp trong nhóm.' }
+  };
+
+  // Mỗi tình huống mô tả hành vi cụ thể; bốn nhóm được xen kẽ khi làm bài.
+  const situations = {
+    A: [
+      'Khi gặp một bài toán chưa biết cách giải, tôi chia vấn đề thành các bước nhỏ để tìm hướng xử lý.',
+      'Khi đọc một thông tin gây bất ngờ, tôi tìm thêm nguồn đáng tin trước khi kết luận.',
+      'Khi học một khái niệm mới, tôi thử giải thích lại bằng lời của mình.',
+      'Khi một cách làm quen thuộc không hiệu quả, tôi nghĩ ra ít nhất một cách khác để thử.',
+      'Khi phải chọn giữa hai phương án, tôi so sánh ưu điểm và hạn chế của từng phương án.',
+      'Khi thấy số liệu trong báo cáo không khớp, tôi tìm nguyên nhân thay vì đoán ngay.',
+      'Khi học dùng một tính năng mới, tôi tự thử trên một việc đơn giản để hiểu cách hoạt động.',
+      'Khi nghe một ý kiến khác mình, tôi tìm hiểu lý do trước khi phản bác.',
+      'Khi cần nhớ thông tin quan trọng, tôi ghi lại hoặc tóm tắt theo cách dễ tìm lại.',
+      'Khi giải quyết việc phức tạp, tôi xác định thông tin nào còn thiếu trước khi bắt đầu.',
+      'Khi một kế hoạch bị chê là khó thực hiện, tôi tìm cách điều chỉnh thay vì bỏ ngay.',
+      'Khi thấy hai sự việc xảy ra cùng lúc, tôi cân nhắc khả năng chúng không có quan hệ nhân quả.',
+      'Khi hoàn thành một việc mới, tôi nhìn lại cách làm để rút kinh nghiệm.',
+      'Khi cần đưa ra ý tưởng, tôi nghĩ đến nhiều phương án trước khi chọn một phương án.',
+      'Khi không hiểu hướng dẫn, tôi đặt câu hỏi cụ thể để làm rõ.',
+      'Khi gặp câu đố hoặc bài toán lạ, tôi dành thời gian thử tìm quy luật.',
+      'Khi thấy một quy trình lặp lại nhiều bước, tôi tìm cách làm gọn mà vẫn giữ chất lượng.',
+      'Khi nhận được lời giải cho một vấn đề, tôi kiểm tra xem nó có phù hợp với dữ kiện không.',
+      'Khi phải học nhiều nội dung, tôi chia việc học thành những phần nhỏ có thể thực hiện.',
+      'Khi một ý tưởng đầu tiên chưa tốt, tôi tiếp tục phát triển thêm phương án khác.',
+      'Khi cần giải thích một vấn đề khó, tôi tìm cách diễn đạt phù hợp với người nghe.',
+      'Khi đọc hướng dẫn dài, tôi xác định các bước chính trước khi bắt tay vào làm.',
+      'Khi quyết định dựa trên kinh nghiệm cũ, tôi xem tình huống hiện tại có điểm gì khác.',
+      'Khi mắc lỗi trong một phép tính hoặc lập luận, tôi quay lại tìm bước gây ra lỗi.',
+      'Khi thấy một vấn đề quen thuộc, tôi thử nhìn nó từ góc độ của người khác.'
+    ],
+    B: [
+      'Khi một người nói ít hơn thường ngày, tôi nhẹ nhàng hỏi xem họ có muốn chia sẻ không.',
+      'Khi tức giận vì bị hiểu lầm, tôi dành một chút thời gian bình tĩnh trước khi trả lời.',
+      'Khi người khác kể chuyện khó khăn, tôi lắng nghe mà không vội đưa ra lời khuyên.',
+      'Khi gặp người mới trong nhóm, tôi chủ động giới thiệu bản thân hoặc bắt chuyện.',
+      'Khi góp ý cho ai đó, tôi nói về hành vi cụ thể thay vì công kích con người họ.',
+      'Khi nhận ra mình đã làm người khác buồn, tôi xin lỗi và tìm cách khắc phục.',
+      'Khi hai người tranh luận, tôi cố gắng hiểu quan điểm của cả hai bên.',
+      'Khi không đồng ý với một quyết định, tôi trình bày lý do một cách tôn trọng.',
+      'Khi người khác đang nói, tôi để họ nói hết trước khi phản hồi.',
+      'Khi thấy bản thân căng thẳng, tôi nhận diện cảm xúc trước khi quyết định phản ứng.',
+      'Khi một người cần không gian riêng, tôi tôn trọng thay vì ép họ trò chuyện.',
+      'Khi trao đổi qua tin nhắn dễ gây hiểu lầm, tôi hỏi lại thay vì tự suy đoán ý người gửi.',
+      'Khi một thành viên ít phát biểu trong cuộc họp, tôi tạo cơ hội để họ chia sẻ nếu họ muốn.',
+      'Khi nhận góp ý khó nghe, tôi cố hiểu nội dung góp ý trước khi phản ứng.',
+      'Khi nhờ người khác giúp, tôi nói rõ mình cần gì và cảm ơn sự hỗ trợ của họ.',
+      'Khi chứng kiến người khác đạt thành quả, tôi ghi nhận sự đóng góp của họ.',
+      'Khi có bất đồng trong nhóm, tôi tìm điểm chung trước khi bàn cách giải quyết.',
+      'Khi người thân chia sẻ niềm vui, tôi dành sự chú ý thay vì chuyển ngay sang chuyện của mình.',
+      'Khi nhận thấy mình nói quá nhiều trong cuộc trò chuyện, tôi dừng lại để người khác có lượt nói.',
+      'Khi không thể đáp ứng một lời nhờ, tôi từ chối rõ ràng và tôn trọng.',
+      'Khi cần nói chuyện về vấn đề nhạy cảm, tôi chọn thời điểm và không gian phù hợp.',
+      'Khi một người có cách nhìn khác, tôi hỏi thêm để hiểu điều quan trọng với họ.',
+      'Khi cảm xúc ảnh hưởng đến quyết định, tôi nói rõ mình cần thêm thời gian suy nghĩ.',
+      'Khi làm việc chung, tôi hỏi các thành viên xem cách trao đổi nào thuận tiện cho họ.',
+      'Khi ai đó mắc lỗi, tôi tìm hiểu hoàn cảnh trước khi phán xét.'
+    ],
+    C: [
+      'Khi kế hoạch bị hủy vào phút cuối, tôi tìm một phương án thay thế phù hợp.',
+      'Khi không đạt mục tiêu, tôi xem lại điều gì có thể thay đổi trước lần thử tiếp theo.',
+      'Khi bắt đầu ở môi trường mới, tôi chủ động tìm hiểu cách mọi việc vận hành.',
+      'Khi việc lớn khiến tôi choáng ngợp, tôi chọn một bước nhỏ để bắt đầu.',
+      'Khi gặp trở ngại không tự xử lý được, tôi tìm người hoặc nguồn hỗ trợ phù hợp.',
+      'Khi lịch trình thay đổi, tôi sắp xếp lại thứ tự ưu tiên thay vì cố giữ nguyên mọi việc.',
+      'Khi nhận kết quả không như mong đợi, tôi cho mình thời gian rồi xem xét bước tiếp theo.',
+      'Khi thử một cách làm không thành công, tôi điều chỉnh dựa trên điều vừa học được.',
+      'Khi khối lượng công việc tăng đột ngột, tôi xác định việc nào cần làm trước.',
+      'Khi phải chờ kết quả chưa chắc chắn, tôi tập trung vào những việc mình có thể kiểm soát.',
+      'Khi một thành viên rời nhóm, tôi trao đổi lại cách phân chia công việc với mọi người.',
+      'Khi một nhiệm vụ mất nhiều thời gian hơn dự kiến, tôi điều chỉnh kế hoạch cho thực tế.',
+      'Khi vừa trải qua một ngày khó khăn, tôi dành thời gian nghỉ ngơi để hồi phục.',
+      'Khi mắc sai sót, tôi nhận trách nhiệm và tìm cách sửa thay vì bỏ cuộc.',
+      'Khi chưa quen một quy định mới, tôi hỏi và ghi lại những điểm cần nhớ.',
+      'Khi gặp phản hồi tiêu cực, tôi chọn một điểm hữu ích để cải thiện.',
+      'Khi một mục tiêu dài hạn tiến triển chậm, tôi ghi nhận những bước nhỏ đã hoàn thành.',
+      'Khi có nhiều yêu cầu cùng lúc, tôi trao đổi lại thời hạn thay vì âm thầm nhận hết.',
+      'Khi cách quen thuộc không còn phù hợp, tôi thử học một cách tiếp cận khác.',
+      'Khi phải bắt đầu lại sau một thất bại, tôi lập kế hoạch phù hợp với sức mình.',
+      'Khi một việc ngoài dự kiến phát sinh, tôi xem xét ảnh hưởng trước khi đổi kế hoạch.',
+      'Khi cảm thấy kiệt sức, tôi nghỉ hoặc tìm hỗ trợ thay vì ép mình tiếp tục bằng mọi giá.',
+      'Khi phải làm việc với một nhóm mới, tôi chủ động làm rõ vai trò và cách phối hợp.',
+      'Khi gặp trở ngại lặp lại, tôi tìm nguyên nhân thay vì chỉ lặp lại cách xử lý cũ.',
+      'Khi hoàn cảnh thay đổi, tôi điều chỉnh mục tiêu nếu mục tiêu cũ không còn phù hợp.'
+    ],
+    D: [
+      'Khi đã hứa hoàn thành một việc nhưng có nguy cơ trễ, tôi báo sớm cho người liên quan.',
+      'Khi phát hiện mình nhận thừa tiền, tôi tìm cách trả lại.',
+      'Khi cần mua món đồ ngoài kế hoạch, tôi xem lại ngân sách trước khi quyết định.',
+      'Khi được giao công cụ mới, tôi đọc hướng dẫn hoặc tìm tài liệu để bắt đầu sử dụng.',
+      'Khi nhóm chưa rõ ai làm gì, tôi đề xuất phân chia nhiệm vụ và hỏi ý kiến mọi người.',
+      'Khi mắc lỗi mà không ai phát hiện, tôi vẫn chủ động thông báo và sửa chữa.',
+      'Khi nhận thu nhập, tôi tính trước các khoản chi cần thiết.',
+      'Khi chia sẻ thông tin của người khác, tôi hỏi sự đồng ý nếu thông tin đó riêng tư.',
+      'Khi gặp sự cố với một ứng dụng, tôi đọc thông báo lỗi và thử cách xử lý cơ bản an toàn.',
+      'Khi phân công công việc, tôi cân nhắc thời gian và khả năng của từng người.',
+      'Khi phải chọn giữa lợi ích trước mắt và điều mình cho là đúng, tôi cân nhắc hệ quả đối với người khác.',
+      'Khi có khoản chi định kỳ, tôi ghi lại để tránh bỏ sót.',
+      'Khi nhận nhiệm vụ chưa rõ yêu cầu, tôi hỏi lại trước khi cam kết thời hạn.',
+      'Khi dùng tài liệu của người khác, tôi ghi nhận nguồn hoặc xin phép khi cần.',
+      'Khi có thể tiết kiệm thời gian bằng công cụ số, tôi tìm hiểu xem công cụ có phù hợp không.',
+      'Khi nhóm có nhiều ý kiến, tôi giúp tổng hợp các lựa chọn trước khi quyết định.',
+      'Khi được giao giữ một bí mật cá nhân, tôi tôn trọng sự riêng tư của người đó.',
+      'Khi đứng trước một khoản vay hoặc trả góp, tôi xem kỹ tổng chi phí và khả năng chi trả.',
+      'Khi hoàn thành phần việc của mình, tôi báo tiến độ để người liên quan nắm được.',
+      'Khi một quy định gây khó hiểu, tôi tìm hiểu mục đích và hỏi người có trách nhiệm.',
+      'Khi chọn ứng dụng lưu dữ liệu cá nhân, tôi xem xét quyền truy cập mà ứng dụng yêu cầu.',
+      'Khi quản lý tiền cho một hoạt động chung, tôi ghi lại các khoản thu chi minh bạch.',
+      'Khi thấy một quyết định trong nhóm có thể gây bất công, tôi nêu mối lo một cách tôn trọng.',
+      'Khi hướng dẫn người khác làm việc, tôi giải thích rõ kết quả mong đợi và thời hạn.',
+      'Khi kế hoạch chi tiêu không còn phù hợp, tôi xem lại và điều chỉnh theo hoàn cảnh.'
+    ]
+  };
+  const questions = situations.A.flatMap((_, index) => Object.keys(groups).map(group => ({
+    id: index * 4 + Object.keys(groups).indexOf(group) + 1,
+    group,
+    text: situations[group][index]
+  })));
+  const answers = Array(questions.length).fill(null);
+  const choices = ['Hầu như không bao giờ', 'Hiếm khi', 'Thỉnh thoảng', 'Thường xuyên', 'Hầu như luôn luôn'];
+  const $ = id => document.getElementById(id);
+  let current = 0;
+
+  // Chuyển màn hình và cập nhật một câu hỏi cùng tiến độ.
+  function show(id) {
+    ['intro', 'quiz', 'result'].forEach(section => $(section).classList.toggle('d-none', section !== id));
+    window.scrollTo(0, 0);
+  }
+  function renderQuestion() {
+    const answered = answers.filter(value => value !== null).length;
+    $('position').textContent = `Câu ${current + 1} / ${questions.length}`;
+    $('progress-text').textContent = `Đã trả lời ${answered} / ${questions.length}`;
+    $('progress').setAttribute('aria-valuenow', answered);
+    $('progress-bar').style.width = `${answered / questions.length * 100}%`;
+    $('question').textContent = questions[current].text;
+    $('options').innerHTML = choices.map((choice, index) => `
+      <input class="btn-check" type="radio" name="answer" id="choice-${index}" value="${index + 1}" ${answers[current] === index + 1 ? 'checked' : ''}>
+      <label class="btn btn-outline-primary answer-label" for="choice-${index}">${choice}</label>`).join('');
+    $('previous').disabled = current === 0;
+    $('next').textContent = current === questions.length - 1 ? 'Xem kết quả' : 'Câu tiếp';
+    $('warning').textContent = '';
+  }
+
+  // Cộng điểm theo nhóm; tất cả các lựa chọn được tính từ 1 đến 5.
+  function showResult() {
+    const missing = answers.indexOf(null);
+    if (missing !== -1) {
+      current = missing;
+      renderQuestion();
+      $('warning').textContent = 'Hãy trả lời câu này trước khi xem kết quả.';
+      $('question').focus();
+      return;
+    }
+    const scores = Object.fromEntries(Object.keys(groups).map(group => [group, 0]));
+    questions.forEach((question, index) => { scores[question.group] += answers[index]; });
+    const keys = Object.keys(groups);
+    const max = Math.max(...keys.map(key => scores[key]));
+    const min = Math.min(...keys.map(key => scores[key]));
+    $('score-cards').innerHTML = keys.map(key => {
+      const total = questions.filter(question => question.group === key).length * 5;
+      return `<div class="col-12 col-sm-6"><div class="card h-100 shadow-sm"><div class="card-body">
+        <h3 class="fs-6">${groups[key].title}</h3>
+        <p class="display-6 fw-bold mb-2">${scores[key]}<small class="fs-6 text-muted">/${total}</small></p>
+        <div class="progress" role="progressbar" aria-label="${groups[key].title}" aria-valuenow="${scores[key]}" aria-valuemin="0" aria-valuemax="${total}"><div class="progress-bar bg-${groups[key].color}" style="width:${scores[key] / total * 100}%"></div></div>
+      </div></div></div>`;
+    }).join('');
+    const block = (title, color, matching, field) => `<div class="alert alert-${color}"><h3 class="fs-5">${title}</h3>${matching.map(key => `<p class="mb-2"><strong>${groups[key].title}:</strong> ${groups[key][field]}</p>`).join('')}</div>`;
+    $('highlights').innerHTML = block('Vùng mạnh của bạn', 'success', keys.filter(key => scores[key] === max), 'strong') +
+      (max === min ? '<div class="alert alert-info">Các phần có điểm bằng nhau. Bạn có thể chọn một phần muốn phát triển để bắt đầu.</div>' : block('Vùng cần phát triển', 'warning', keys.filter(key => scores[key] === min), 'tip'));
+    show('result');
+    $('result-heading').focus();
+  }
+
+  // Điều hướng, lưu lựa chọn trong bộ nhớ và làm lại bài.
+  $('start').addEventListener('click', () => { renderQuestion(); show('quiz'); $('question').focus(); });
+  $('options').addEventListener('change', event => {
+    if (event.target.name !== 'answer') return;
+    answers[current] = Number(event.target.value);
+    const answered = answers.filter(value => value !== null).length;
+    $('progress-text').textContent = `Đã trả lời ${answered} / ${questions.length}`;
+    $('progress').setAttribute('aria-valuenow', answered);
+    $('progress-bar').style.width = `${answered / questions.length * 100}%`;
+    $('warning').textContent = '';
+  });
+  $('previous').addEventListener('click', () => { if (current > 0) { current--; renderQuestion(); $('question').focus(); } });
+  $('next').addEventListener('click', () => {
+    if (answers[current] === null) { $('warning').textContent = 'Hãy chọn một câu trả lời trước khi tiếp tục.'; return; }
+    if (current === questions.length - 1) { showResult(); return; }
+    current++;
+    renderQuestion();
+    $('question').focus();
+  });
+  $('reset').addEventListener('click', () => { answers.fill(null); current = 0; renderQuestion(); show('quiz'); $('question').focus(); });
+</script>
+</body>
+</html>
